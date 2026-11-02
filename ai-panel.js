@@ -1,0 +1,19 @@
+// api/flushPending are injected by the authenticated cloud adapter.
+window.gitcoInstallAI=function({api,flushPending,applyPayload}){
+ const button=document.createElement('button');button.id='gitcoAIButton';button.className='secondary';button.textContent='✦ مساعد AI';document.querySelector('.top-actions').appendChild(button);
+ let proposal=null,working=false;
+ const errors={OPENAI_NOT_CONFIGURED:'المساعد غير مفعّل: يلزم إعداد مفتاح OpenAI على الخادم.',AI_ADMIN_REQUIRED:'المساعد متاح للمدير المعتمد فقط.',DATA_CHANGED_RETRY:'تغيرت البيانات. أعد الطلب لمراجعة اقتراح جديد.',CONFIRMATION_EXPIRED_OR_USED:'انتهت صلاحية التأكيد أو تم استخدامه. أعد الطلب.',LOGIN_REQUIRED:'انتهت جلسة الدخول. أعد الاتصال.',AI_RATE_LIMIT:'طلبات كثيرة. انتظر دقيقة ثم حاول مجددًا.'};
+ const panel=document.createElement('section');panel.id='gitcoAIPanel';panel.hidden=true;panel.setAttribute('aria-label','مساعد المشاريع / Project assistant');panel.innerHTML='<div class="panel-head"><h2>✦ GITCO AI</h2><button type="button" class="plain" id="aiClose">إغلاق / Close</button></div><p class="muted">أوامر عربية أو إنجليزية. يطلب تأكيدًا قبل حفظ أي تعديل. المهام هي مراحل المشروع. / Review each change before saving.</p><div id="aiMessages" role="log" aria-live="polite"></div><div id="aiProposal" hidden></div><form id="aiForm"><label for="aiInput">طلبك / Your request</label><textarea id="aiInput" rows="3" maxlength="4000" required placeholder="اعرض المشاريع المتأخرة، أو أضف مهمة شراء المواد لمشروع…"></textarea><button class="primary" id="aiSend">إرسال / Send</button></form>';
+ document.body.appendChild(panel);
+ const msg=panel.querySelector('#aiMessages'),box=panel.querySelector('#aiProposal'),send=panel.querySelector('#aiSend');
+ function line(text){const p=document.createElement('p');p.textContent=text;msg.appendChild(p);p.scrollIntoView({block:'nearest'});}
+ function busy(v){working=v;send.disabled=v;panel.querySelector('#aiInput').disabled=v;box.querySelectorAll('button').forEach(b=>b.disabled=v)}
+ async function request(body){try{return await api('/functions/v1/gitco-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}catch(e){throw Error(errors[e.message]||e.message)}}
+ function clearProposal(){proposal=null;box.replaceChildren();box.hidden=true;}
+ button.onclick=()=>{panel.hidden=false;panel.querySelector('#aiInput').focus()};panel.querySelector('#aiClose').onclick=()=>{panel.hidden=true;button.focus()};
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!panel.hidden){panel.hidden=true;button.focus()}});
+ panel.querySelector('#aiForm').onsubmit=async e=>{e.preventDefault();if(working)return;const input=panel.querySelector('#aiInput'),message=input.value.trim();if(!message)return;clearProposal();line(message);busy(true);
+ try{if(document.querySelector('.modal-backdrop'))throw Error('احفظ أو أغلق النافذة المفتوحة أولًا');await flushPending();const result=await request({mode:'chat',message});line(result.message||'');input.value='';if(result.proposal){proposal=result.proposal;box.hidden=false;const pre=document.createElement('pre');pre.textContent=JSON.stringify(proposal.action,null,2);box.appendChild(pre);const confirm=document.createElement('button'),cancel=document.createElement('button');confirm.className='primary';confirm.textContent='تأكيد وحفظ / Confirm & save';cancel.className='plain';cancel.textContent='إلغاء / Cancel';box.append(confirm,cancel);cancel.onclick=clearProposal;confirm.onclick=async()=>{if(working||!proposal)return;busy(true);try{await flushPending();const result=await request({mode:'confirm',action_id:proposal.id});applyPayload(result.payload);line(result.message);clearProposal()}catch(e){line(e.message);clearProposal()}finally{busy(false)}};}}
+ catch(e){line(e.message)}finally{busy(false)}
+ };
+};
