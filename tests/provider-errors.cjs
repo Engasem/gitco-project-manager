@@ -1,0 +1,7 @@
+const assert=require('node:assert/strict'),{pathToFileURL}=require('node:url');
+(async()=>{const {handle}=await import(pathToFileURL(require('node:path').resolve(__dirname,'../supabase/functions/gitco-ai/index.ts')));let checks=0;
+for(const [status,code,expected] of [[401,'invalid_api_key','OPENAI_KEY_INVALID'],[429,'insufficient_quota','OPENAI_QUOTA_REQUIRED'],[429,'rate_limit_exceeded','OPENAI_RATE_LIMIT'],[404,'model_not_found','OPENAI_MODEL_UNAVAILABLE'],[400,'invalid_json_schema','OPENAI_REQUEST_INVALID']]){
+ const result=await handle(new Request('https://edge.test',{method:'POST',headers:{Authorization:'Bearer dummy','Content-Type':'application/json'},body:JSON.stringify({mode:'chat',message:'read projects'})}),{env:n=>({SUPABASE_URL:'https://db.test',SUPABASE_ANON_KEY:'dummy',OPENAI_API_KEY:'DUMMY_PRIVATE_MARKER'})[n],fetch:async url=>{if(url.includes('/auth/v1/user'))return Response.json({id:'u1'});if(url.includes('gitco_members'))return Response.json([{role:'admin',approved:true}]);if(url.includes('gitco_ai_context'))return Response.json({projects:[]});return Response.json({error:{code,message:'Provider echoed DUMMY_PRIVATE_MARKER'}},{status})}});
+ const body=await result.text();assert.equal(JSON.parse(body).error,expected);assert(!body.includes('DUMMY_PRIVATE_MARKER'));checks++;
+}console.log('PASS '+checks+' provider failure classifications and secret-redaction checks');})().catch(e=>{console.error(e);process.exitCode=1});
+
