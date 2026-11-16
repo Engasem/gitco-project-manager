@@ -4,17 +4,33 @@ function gitcoWorkforce(value) {
 }
 (() => {
   const now=new Date();
-  let date=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`,query='';
+  let date=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`,query='',month=date.slice(0,7);
   const text=(ar,en)=>lang==='ar'?ar:en;
   function rows(){return workforce.workers.filter(w=>!w.archived&&w.name.toLowerCase().includes(query.toLowerCase()));}
+  function drawMonth(){
+    const host=document.getElementById('workerMonthRows');if(!host)return;
+    const days=Object.entries(workforce.days).filter(([d])=>d.startsWith(month+'-'));
+    host.innerHTML=workforce.workers.map(w=>{
+      let present=0,absent=0,overtime=0;
+      for(const [,day] of days){const r=day[w.id];if(r?.status==='present'){present++;overtime+=Number(r.overtime)||0}else if(r?.status==='absent')absent++}
+      return `<article class="worker-month-row" data-month-worker="${esc(w.id)}"><strong>${esc(w.name)}</strong><span>${text('حضور','Present')}: <b data-total="present">${present}</b> ${text('يوم','days')}</span><span>${text('غياب','Absent')}: <b data-total="absent">${absent}</b> ${text('يوم','days')}</span><span>${text('إضافي','Overtime')}: <b data-total="overtime">${overtime}</b> ${text('ساعة','hours')}</span></article>`;
+    }).join('')||`<p class="empty">${text('لا يوجد عمال مسجلون.','No workers yet.')}</p>`;
+  }
   function drawRows(){
+    drawMonth();
     const day=workforce.days[date]||{},all=workforce.workers.filter(w=>!w.archived);
     document.getElementById('workerSummary').textContent=text('حاضر','Present')+': '+all.filter(w=>day[w.id]?.status==='present').length+' · '+text('غايب','Absent')+': '+all.filter(w=>day[w.id]?.status==='absent').length+' · '+text('غير مسجل','Unmarked')+': '+all.filter(w=>!day[w.id]?.status).length;
     document.getElementById('workerRows').innerHTML=rows().map(w=>{const r=day[w.id]||{};return `<article class="worker-row" data-worker="${esc(w.id)}"><strong>${esc(w.name)}</strong><div class="worker-status"><button type="button" data-status="present" aria-pressed="${r.status==='present'}" class="${r.status==='present'?'present':'plain'}">${text('حاضر','Present')}</button><button type="button" data-status="absent" aria-pressed="${r.status==='absent'}" class="${r.status==='absent'?'absent':'plain'}">${text('غايب','Absent')}</button></div><label class="worker-overtime">${text('إضافي (ساعات)','Overtime (hours)')}<input type="number" min="0" max="24" step="0.5" inputmode="decimal" value="${Number(r.overtime)||0}" ${r.status!=='present'?'disabled':''} aria-label="${text('إضافي','Overtime')} — ${esc(w.name)}"></label><button class="plain" data-clear title="${text('إلغاء تسجيل اليوم','Clear today')}">↶</button></article>`}).join('')||`<div class="empty">${text('لا يوجد عمال. أضف أسماء العمال للبدء.','No workers. Add names to begin.')}</div>`;
   }
   window.gitcoRenderWorkers=function(){
     const host=document.getElementById('view-workers');if(!host)return;
-    host.innerHTML=`<div class="hello"><div><h1>${text('حضور العمال','Worker attendance')}</h1><div class="muted">${text('اختار اليوم وسجّل الحضور والإضافي. الحفظ تلقائي.','Choose a day and record attendance and overtime. Changes save automatically.')}</div></div><button class="primary" id="workerAdd">＋ ${text('إضافة عامل','Add worker')}</button></div><div class="toolbar"><label class="field">${text('اليوم','Date')}<input id="workerDate" type="date" value="${date}"></label><label class="field">${text('بحث عن عامل','Find worker')}<input id="workerSearch" type="search" value="${esc(query)}"></label></div><div class="panel"><p id="workerSummary" role="status"></p><div id="workerRows"></div></div>`;
+    host.innerHTML=`<div class="hello"><div><h1>${text('حضور العمال','Worker attendance')}</h1><div class="muted">${text('اختار اليوم وسجّل الحضور والإضافي. الحفظ تلقائي.','Choose a day and record attendance and overtime. Changes save automatically.')}</div></div><button class="primary" id="workerAdd">＋ ${text('إضافة عامل','Add worker')}</button></div><div class="toolbar"><label class="field">${text('اليوم','Date')}<input id="workerDate" type="date" value="${date}"></label><label class="field">${text('بحث عن عامل','Find worker')}<input id="workerSearch" type="search" value="${esc(query)}"></label></div><div class="panel"><button type="button" class="secondary" id="workerAllPresent">✓ ${text('الكل حاضر','Mark all present')}</button><p class="muted">${text('يسجّل العمال غير المسجّلين فقط؛ الغياب والإضافي المسجّل يبقى كما هو.','Marks unmarked workers only; existing absences and overtime stay unchanged.')}</p><p id="workerSummary" role="status"></p><div id="workerRows"></div></div><details class="panel worker-month"><summary>${text('إجمالي الشهر لكل عامل','Monthly totals per worker')}</summary><label class="field">${text('الشهر','Month')}<input type="month" id="workerMonth" value="${month}"></label><p class="muted">${text('الأيام غير المسجّلة والعطل لا تُحسب غياباً.','Unmarked days and days off do not count as absences.')}</p><div id="workerMonthRows"></div></details>`;
+    document.getElementById('workerMonth').onchange=e=>{if(e.target.value){month=e.target.value;drawMonth()}};
+    document.getElementById('workerAllPresent').onclick=()=>{
+      const day=workforce.days[date]||(workforce.days[date]={});
+      for(const w of workforce.workers)if(!w.archived&&!day[w.id]?.status)day[w.id]={status:'present',overtime:0};
+      save();drawRows();
+    };
     document.getElementById('workerDate').onchange=e=>{if(e.target.value){date=e.target.value;drawRows()}};
     document.getElementById('workerSearch').oninput=e=>{query=e.target.value;drawRows()};
     document.getElementById('workerAdd').onclick=()=>{
@@ -22,7 +38,7 @@ function gitcoWorkforce(value) {
       document.getElementById('workerForm').onsubmit=e=>{e.preventDefault();const name=e.target.elements.name.value.trim();if(!name)return;if(workforce.workers.some(w=>w.name.toLowerCase()===name.toLowerCase())){toast(text('اسم العامل مسجل مسبقاً','Worker already exists'));return}workforce.workers.push({id:crypto.randomUUID(),name});save();closeModal();window.gitcoRenderWorkers()};
     };
     document.getElementById('workerRows').onclick=e=>{const row=e.target.closest('[data-worker]'),b=e.target.closest('button');if(!row||!b)return;const day=workforce.days[date]||(workforce.days[date]={});if(b.hasAttribute('data-clear'))delete day[row.dataset.worker];else if(b.dataset.status)day[row.dataset.worker]={...day[row.dataset.worker],status:b.dataset.status,overtime:b.dataset.status==='present'?(day[row.dataset.worker]?.overtime||0):0};else return;save();drawRows()};
-    document.getElementById('workerRows').onchange=e=>{if(e.target.tagName!=='INPUT')return;const input=e.target,hours=Number(input.value),id=input.closest('[data-worker]').dataset.worker,r=workforce.days[date]?.[id];if(!r||r.status!=='present')return;if(input.value===''||!Number.isFinite(hours)||hours<0||hours>24||hours*2!==Math.round(hours*2)){input.value=r.overtime||0;toast(text('أدخل ساعات من 0 إلى 24، بفاصل نصف ساعة','Enter 0–24 hours in half-hour steps'));return}r.overtime=hours;save()};
+    document.getElementById('workerRows').onchange=e=>{if(e.target.tagName!=='INPUT')return;const input=e.target,hours=Number(input.value),id=input.closest('[data-worker]').dataset.worker,r=workforce.days[date]?.[id];if(!r||r.status!=='present')return;if(input.value===''||!Number.isFinite(hours)||hours<0||hours>24||hours*2!==Math.round(hours*2)){input.value=r.overtime||0;toast(text('أدخل ساعات من 0 إلى 24، بفاصل نصف ساعة','Enter 0–24 hours in half-hour steps'));return}r.overtime=hours;save();drawMonth()};
     drawRows();
   };
 })();
