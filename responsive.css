@@ -91,3 +91,13 @@ button { overflow-wrap:normal; word-break:normal; }
  .top-actions #topAdd { flex:1 1 140px; }
  #gitcoAIButton { flex:1 1 130px; }
 }
+.worker-row { display:grid; grid-template-columns:minmax(100px,1fr) minmax(170px,1fr) minmax(100px,160px) 44px; gap:12px; align-items:center; padding:16px 0; border-bottom:1px solid var(--line); }
+.worker-row:last-child { border-bottom:0; }
+.worker-status { display:flex; gap:8px; }
+.worker-status button { flex:1; }
+.worker-status .present { background:var(--green); color:white; }
+.worker-status .absent { background:var(--red); color:white; }
+.worker-overtime { display:grid; gap:6px; font-size:13px; }
+.worker-overtime input { width:100%; padding:10px; border:1px solid var(--line); border-radius:10px; }
+.worker-overtime input:disabled { background:#edf0f3; color:#69717d; }
+@media(max-width:680px) { .worker-row { grid-template-columns:minmax(0,1fr) 44px; gap:12px; } .worker-row>strong { grid-column:1; } .worker-status { grid-column:1/-1; grid-row:2; } .worker-overtime { grid-column:1/-1; } .worker-row>[data-clear] { grid-column:2; grid-row:1; } }
