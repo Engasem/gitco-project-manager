@@ -19,7 +19,7 @@ assert.equal(await page.locator(`[data-month-worker="${id}"] [data-total=present
 await page.click('#workerAllPresent');assert.equal(await page.locator('.worker-overtime input').first().inputValue(),'1.5');checks++;
 await page.fill('#workerMonth','2025-12');assert.equal(await page.locator(`[data-month-worker="${id}"] [data-total=present]`).innerText(),'0');assert.equal(await page.locator(`[data-month-worker="${id}"] [data-total=absent]`).innerText(),'0');assert.equal(await page.locator(`[data-month-worker="${id}"] [data-total=overtime]`).innerText(),'0');checks++;
 await page.locator('.worker-files summary').click();
-await page.setInputFiles('#workerImportFile',{name:'workers.csv',mimeType:'text/csv',buffer:Buffer.from('\ufeffاسم العامل\r\nAhmed\r\nعلي\r\nعلي\r\n"Said, Jr"')});
+await page.setInputFiles('#workerImportFile',{name:'workers.csv',mimeType:'text/csv',buffer:Buffer.from('\ufeffاسم الموظف\r\nAhmed\r\nعلي\r\nعلي\r\n"Said, Jr"')});
 await page.waitForFunction(()=>workforce.workers.length===4);assert.equal(await page.evaluate(()=>workforce.workers.filter(w=>w.name==='علي').length),1);assert.equal(await page.evaluate(()=>workforce.days[Object.keys(workforce.days)[0]][workforce.workers[0].id].status),'absent');checks++;
 await page.locator('.worker-files summary').click();
 const downloadPromise=page.waitForEvent('download');await page.click('#workerExport');const download=await downloadPromise;const csv=fs.readFileSync(await download.path(),'utf8');assert(csv.includes('علي'));assert(csv.includes('"Said, Jr"'));checks++;
