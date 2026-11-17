@@ -23,6 +23,7 @@ function gitcoWorkforce(value) {
     if(quoted)throw Error(text('الملف يحتوي علامة اقتباس غير مغلقة.','Unclosed quote in CSV.'));
     if(value||row.length){row.push(value);lines.push(row)}return lines.filter(r=>r.some(v=>v.trim()));
   }
+  const damagedName=name=>/[?؟\ufffd]/.test(String(name));
   let importMessage='',importBusy=false;
   function importStatus(message){
     importMessage=message;const host=document.getElementById('workerImportStatus');if(host){host.textContent=message;host.hidden=!message}
@@ -53,17 +54,20 @@ function gitcoWorkforce(value) {
       const headers=['name','worker name','employee name','اسم العامل','اسم الموظف','الاسم'];let column=data[0].findIndex(v=>headers.includes(v.trim().toLowerCase()));
       if(column>=0)data.shift();else{column=0;if(data[0].length!==1)throw Error(text('أضف عموداً بعنوان اسم العامل أو name.','Add a column named name or اسم العامل.'))}
       const names=data.map(r=>(r[column]||'').trim().replace(/^'(?=[=+@\-])/,'')).filter(Boolean);
+      if(names.some(damagedName))throw Error(text('الأسماء في الملف تالفة وتحتوي علامات استفهام. اختر ملف Excel الأصلي (.xlsx) مباشرة، بدون تحويله إلى CSV.','Names are damaged and contain question marks. Select the original Excel (.xlsx) file directly.'));
       if(names.length>5000||names.some(n=>n.length>100||n.includes('\ufffd')||/[\r\n]/.test(n)))throw Error(text('تحقق من الأسماء واحفظ الملف بترميز UTF-8 (حتى 5000 اسم، 100 حرف للاسم).','Check names and save as UTF-8 (up to 5000 names, 100 characters each).'));
       const known=new Set(workforce.workers.map(w=>w.name.trim().toLowerCase())),added=[];let duplicates=0;
       for(const name of names){const key=name.toLowerCase();if(known.has(key)){duplicates++;continue}known.add(key);added.push({id:crypto.randomUUID(),name})}
       if(!added.length){importStatus(text(`لا يوجد أسماء جديدة للإضافة. الأسماء المكررة: ${duplicates}.`,`No new names to add. Duplicates: ${duplicates}.`));return}
+      const damaged=workforce.workers.filter(w=>!w.archived&&damagedName(w.name));
       importStatus(text('الملف جاهز. راجع الأسماء واضغط تأكيد الإضافة.','File ready. Review names and confirm.'));
-      showModal(`<h2>${text('تأكيد استيراد العمال','Confirm worker import')}</h2><p>${esc(file.name)}</p><p>${text(`أسماء جديدة: ${added.length} — أسماء مكررة ستُتجاوز: ${duplicates}`,`New names: ${added.length} — duplicates to skip: ${duplicates}`)}</p><div class="worker-import-preview"><ol>${added.map(w=>`<li>${esc(w.name)}</li>`).join('')}</ol></div><p class="muted">${text('لن تتغير سجلات الحضور السابقة.','Existing attendance stays unchanged.')}</p><div class="actions"><button type="button" class="plain" id="workerImportCancel">${text('إلغاء','Cancel')}</button><button type="button" class="primary" id="workerImportConfirm">${text(`تأكيد إضافة ${added.length} عامل`,`Confirm adding ${added.length} workers`)}</button></div>`);
+      showModal(`<h2>${text('تأكيد استيراد العمال','Confirm worker import')}</h2><p>${esc(file.name)}</p><p>${text(`أسماء جديدة: ${added.length} — أسماء مكررة ستُتجاوز: ${duplicates}`,`New names: ${added.length} — duplicates to skip: ${duplicates}`)}</p>${damaged.length?`<div class="worker-repair"><label><input id="workerHideDamaged" type="checkbox"> ${text(`إخفاء ${damaged.length} اسم تالف من القائمة اليومية`, `Hide ${damaged.length} damaged names from the daily list`)}</label><p class="muted">${text('تُحفظ سجلاتهم السابقة في النسخة الاحتياطية، ولا تُنقل تلقائياً للأسماء الجديدة لأن المطابقة غير مؤكدة.','Previous records remain in the backup. Attendance is not transferred to new names because matching is uncertain.')}</p></div>`:''}<div class="worker-import-preview"><ol>${added.map(w=>`<li>${esc(w.name)}</li>`).join('')}</ol></div><p class="muted">${text('لن تتغير سجلات الحضور السابقة.','Existing attendance stays unchanged.')}</p><div class="actions"><button type="button" class="plain" id="workerImportCancel">${text('إلغاء','Cancel')}</button><button type="button" class="primary" id="workerImportConfirm">${text(`تأكيد إضافة ${added.length} عامل`,`Confirm adding ${added.length} workers`)}</button></div>`);
       document.getElementById('workerImportCancel').onclick=()=>{closeModal();importStatus(text('تم إلغاء الاستيراد؛ لم يُضف أي عامل.','Import cancelled; no workers added.'))};
       document.getElementById('workerImportConfirm').onclick=()=>{
         const current=new Set(workforce.workers.map(w=>w.name.trim().toLowerCase())),fresh=added.filter(w=>!current.has(w.name.toLowerCase()));
+        if(document.getElementById('workerHideDamaged')?.checked)for(const w of workforce.workers)if(!w.archived&&damagedName(w.name))w.archived=true;
         workforce.workers.push(...fresh);save();query='';closeModal();window.gitcoRenderWorkers();
-        importStatus(text(`تمت إضافة ${fresh.length} عامل إلى القائمة. إجمالي العمال: ${workforce.workers.length}. تابع حالة الحفظ السحابي أعلى الصفحة.`,`Added ${fresh.length} workers. Total: ${workforce.workers.length}. See cloud save status above.`));
+        importStatus(text(`تمت إضافة ${fresh.length} عامل إلى القائمة. إجمالي العمال: ${workforce.workers.filter(w=>!w.archived).length}. تابع حالة الحفظ السحابي أعلى الصفحة.`,`Added ${fresh.length} workers. Total: ${workforce.workers.filter(w=>!w.archived).length}. See cloud save status above.`));
       };
     }catch(e){importStatus(text('تعذر الاستيراد: ','Import failed: ')+(e.message||text('الملف غير صالح.','Invalid file.')))}
     finally{importBusy=false;importStatus(importMessage)}
@@ -72,7 +76,7 @@ function gitcoWorkforce(value) {
   function drawMonth(){
     const host=document.getElementById('workerMonthRows');if(!host)return;
     const days=Object.entries(workforce.days).filter(([d])=>d.startsWith(month+'-'));
-    host.innerHTML=workforce.workers.map(w=>{
+    host.innerHTML=workforce.workers.filter(w=>!w.archived).map(w=>{
       let present=0,absent=0,overtime=0;
       for(const [,day] of days){const r=day[w.id];if(r?.status==='present'){present++;overtime+=Number(r.overtime)||0}else if(r?.status==='absent')absent++}
       return `<article class="worker-month-row" data-month-worker="${esc(w.id)}"><strong>${esc(w.name)}</strong><span>${text('حضور','Present')}: <b data-total="present">${present}</b> ${text('يوم','days')}</span><span>${text('غياب','Absent')}: <b data-total="absent">${absent}</b> ${text('يوم','days')}</span><span>${text('إضافي','Overtime')}: <b data-total="overtime">${overtime}</b> ${text('ساعة','hours')}</span></article>`;

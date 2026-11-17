@@ -113,3 +113,7 @@ button { overflow-wrap:normal; word-break:normal; }
 
 .worker-import-preview { max-height:40vh; overflow:auto; border:1px solid var(--line); border-radius:10px; padding:8px; }
 .worker-import-preview li { padding:6px; }
+
+.worker-repair { padding:12px; margin-bottom:12px; border:1px solid var(--line); border-radius:10px; }
+.worker-repair label { display:flex; align-items:center; gap:10px; }
+.worker-repair input { width:20px; height:20px; }
