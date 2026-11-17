@@ -107,3 +107,6 @@ button { overflow-wrap:normal; word-break:normal; }
 .worker-month .field { margin-top:12px; max-width:260px; }
 .worker-month-row { display:grid; grid-template-columns:minmax(100px,1fr) repeat(3,minmax(90px,1fr)); gap:12px; padding:16px 0; border-bottom:1px solid var(--line); }
 @media(max-width:680px) { .worker-month-row { grid-template-columns:repeat(2,minmax(0,1fr)); } .worker-month-row strong { grid-column:1/-1; } }
+
+.worker-files { margin-bottom:16px; }
+.worker-files summary { cursor:pointer; font-weight:700; min-height:44px; padding:8px 0; }

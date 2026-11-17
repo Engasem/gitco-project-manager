@@ -6,6 +6,39 @@ function gitcoWorkforce(value) {
   const now=new Date();
   let date=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`,query='',month=date.slice(0,7);
   const text=(ar,en)=>lang==='ar'?ar:en;
+  function downloadCsv(filename,rows){
+    const cell=value=>{let v=String(value??'');if(/^[=+@\-\t\r]/.test(v))v="'"+v;return '"'+v.replace(/"/g,'""')+'"'};
+    const blob=new Blob(['\ufeff'+rows.map(row=>row.map(cell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+  function parseCsv(source){
+    source=source.replace(/^\ufeff/,'');const lines=[],row=[];let value='',quoted=false;
+    const delimiter=source.split(/\r?\n/,1)[0].includes(';')?';':',';
+    for(let i=0;i<source.length;i++){
+      const c=source[i];
+      if(c==='"'){if(quoted&&source[i+1]==='"'){value+='"';i++}else quoted=!quoted}
+      else if(!quoted&&(c===delimiter||c==='\n'||c==='\r')){row.push(value);value='';if(c!==delimiter){if(c==='\r'&&source[i+1]==='\n')i++;lines.push(row.splice(0))}}
+      else value+=c;
+    }
+    if(quoted)throw Error(text('الملف يحتوي علامة اقتباس غير مغلقة.','Unclosed quote in CSV.'));
+    if(value||row.length){row.push(value);lines.push(row)}return lines.filter(r=>r.some(v=>v.trim()));
+  }
+  async function importWorkers(file){
+    if(!file)return;
+    try{
+      if(file.size>1024*1024)throw Error(text('حجم الملف الأقصى 1 ميغابايت.','Maximum file size is 1 MB.'));
+      if(!/\.csv$/i.test(file.name))throw Error(text('احفظ الملف من Excel بصيغة CSV UTF-8.','Save from Excel as CSV UTF-8.'));
+      const data=parseCsv(await file.text());if(!data.length)throw Error(text('الملف فارغ.','File is empty.'));
+      const headers=['name','worker name','اسم العامل','الاسم'];let column=data[0].findIndex(v=>headers.includes(v.trim().toLowerCase()));
+      if(column>=0)data.shift();else{column=0;if(data[0].length!==1)throw Error(text('أضف عموداً بعنوان اسم العامل أو name.','Add a column named name or اسم العامل.'))}
+      const names=data.map(r=>(r[column]||'').trim().replace(/^'(?=[=+@\-])/,'')).filter(Boolean);
+      if(names.length>5000||names.some(n=>n.length>100||n.includes('\ufffd')||/[\r\n]/.test(n)))throw Error(text('تحقق من الأسماء واحفظ الملف بترميز UTF-8 (حتى 5000 اسم، 100 حرف للاسم).','Check names and save as UTF-8 (up to 5000 names, 100 characters each).'));
+      const known=new Set(workforce.workers.map(w=>w.name.trim().toLowerCase())),added=[];let duplicates=0;
+      for(const name of names){const key=name.toLowerCase();if(known.has(key)){duplicates++;continue}known.add(key);added.push({id:crypto.randomUUID(),name})}
+      if(added.length){workforce.workers.push(...added);save();window.gitcoRenderWorkers()}
+      toast(text(`تمت إضافة ${added.length} عامل، وتجاوز ${duplicates} اسم مكرر.`,`Added ${added.length} workers; skipped ${duplicates} duplicates.`));
+    }catch(e){toast(e.message)}
+  }
   function rows(){return workforce.workers.filter(w=>!w.archived&&w.name.toLowerCase().includes(query.toLowerCase()));}
   function drawMonth(){
     const host=document.getElementById('workerMonthRows');if(!host)return;
@@ -24,7 +57,11 @@ function gitcoWorkforce(value) {
   }
   window.gitcoRenderWorkers=function(){
     const host=document.getElementById('view-workers');if(!host)return;
-    host.innerHTML=`<div class="hello"><div><h1>${text('حضور العمال','Worker attendance')}</h1><div class="muted">${text('اختار اليوم وسجّل الحضور والإضافي. الحفظ تلقائي.','Choose a day and record attendance and overtime. Changes save automatically.')}</div></div><button class="primary" id="workerAdd">＋ ${text('إضافة عامل','Add worker')}</button></div><div class="toolbar"><label class="field">${text('اليوم','Date')}<input id="workerDate" type="date" value="${date}"></label><label class="field">${text('بحث عن عامل','Find worker')}<input id="workerSearch" type="search" value="${esc(query)}"></label></div><div class="panel"><button type="button" class="secondary" id="workerAllPresent">✓ ${text('الكل حاضر','Mark all present')}</button><p class="muted">${text('يسجّل العمال غير المسجّلين فقط؛ الغياب والإضافي المسجّل يبقى كما هو.','Marks unmarked workers only; existing absences and overtime stay unchanged.')}</p><p id="workerSummary" role="status"></p><div id="workerRows"></div></div><details class="panel worker-month"><summary>${text('إجمالي الشهر لكل عامل','Monthly totals per worker')}</summary><label class="field">${text('الشهر','Month')}<input type="month" id="workerMonth" value="${month}"></label><p class="muted">${text('الأيام غير المسجّلة والعطل لا تُحسب غياباً.','Unmarked days and days off do not count as absences.')}</p><div id="workerMonthRows"></div></details>`;
+    host.innerHTML=`<div class="hello"><div><h1>${text('حضور العمال','Worker attendance')}</h1><div class="muted">${text('اختار اليوم وسجّل الحضور والإضافي. الحفظ تلقائي.','Choose a day and record attendance and overtime. Changes save automatically.')}</div></div><button class="primary" id="workerAdd">＋ ${text('إضافة عامل','Add worker')}</button></div><details class="panel worker-files"><summary>${text('استيراد وتصدير العمال','Import / export workers')}</summary><p class="muted">${text('ملف CSV UTF-8 يفتح بـExcel. عمود اسم العامل؛ الاستيراد يضيف الأسماء فقط ويحافظ على الحضور السابق.','CSV UTF-8 for Excel. Use a name column; import adds names and preserves attendance.')}</p><div class="inline"><button class="secondary" id="workerImport">${text('استيراد أسماء العمال','Import worker names')}</button><button class="plain" id="workerExport">${text('تصدير أسماء العمال','Export worker names')}</button><button class="plain" id="workerTemplate">${text('تنزيل قالب جاهز','Download template')}</button><input hidden type="file" id="workerImportFile" accept=".csv,text/csv"></div></details><div class="toolbar"><label class="field">${text('اليوم','Date')}<input id="workerDate" type="date" value="${date}"></label><label class="field">${text('بحث عن عامل','Find worker')}<input id="workerSearch" type="search" value="${esc(query)}"></label></div><div class="panel"><button type="button" class="secondary" id="workerAllPresent">✓ ${text('الكل حاضر','Mark all present')}</button><p class="muted">${text('يسجّل العمال غير المسجّلين فقط؛ الغياب والإضافي المسجّل يبقى كما هو.','Marks unmarked workers only; existing absences and overtime stay unchanged.')}</p><p id="workerSummary" role="status"></p><div id="workerRows"></div></div><details class="panel worker-month"><summary>${text('إجمالي الشهر لكل عامل','Monthly totals per worker')}</summary><label class="field">${text('الشهر','Month')}<input type="month" id="workerMonth" value="${month}"></label><p class="muted">${text('الأيام غير المسجّلة والعطل لا تُحسب غياباً.','Unmarked days and days off do not count as absences.')}</p><div id="workerMonthRows"></div></details>`;
+    document.getElementById('workerImport').onclick=()=>document.getElementById('workerImportFile').click();
+    document.getElementById('workerImportFile').onchange=e=>{importWorkers(e.target.files[0]);e.target.value=''};
+    document.getElementById('workerExport').onclick=()=>downloadCsv('gitco-workers.csv',[[text('اسم العامل','name')],...workforce.workers.map(w=>[w.name])]);
+    document.getElementById('workerTemplate').onclick=()=>downloadCsv('gitco-workers-template.csv',[[text('اسم العامل','name')]]);
     document.getElementById('workerMonth').onchange=e=>{if(e.target.value){month=e.target.value;drawMonth()}};
     document.getElementById('workerAllPresent').onclick=()=>{
       const day=workforce.days[date]||(workforce.days[date]={});
