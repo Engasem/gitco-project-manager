@@ -117,3 +117,11 @@ button { overflow-wrap:normal; word-break:normal; }
 .worker-repair { padding:12px; margin-bottom:12px; border:1px solid var(--line); border-radius:10px; }
 .worker-repair label { display:flex; align-items:center; gap:10px; }
 .worker-repair input { width:20px; height:20px; }
+
+.worker-management { margin-bottom:16px; }
+.worker-management summary { cursor:pointer; font-weight:700; min-height:44px; padding:8px 0; }
+.worker-identity { min-width:0; }
+.worker-row-actions { margin-top:8px; }
+.worker-row-actions button { padding:6px 10px; font-size:12px; }
+#workerArchived > div { justify-content:space-between; border-bottom:1px solid var(--line); padding:8px 0; }
+@media(max-width:680px) { .worker-row>.worker-identity { grid-column:1; grid-row:1; } }
