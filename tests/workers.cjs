@@ -26,7 +26,7 @@ const downloadPromise=page.waitForEvent('download');await page.click('#workerExp
 await page.setInputFiles('#workerImportFile',{name:'roundtrip.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});await page.waitForTimeout(100);assert.equal(await page.evaluate(()=>workforce.workers.length),4);checks++;
 await page.setInputFiles('#workerImportFile',{name:'bad.csv',mimeType:'text/csv',buffer:Buffer.from('name\n"broken')});await page.waitForTimeout(100);assert.equal(await page.evaluate(()=>workforce.workers.length),4);checks++;
 const xlsx=require('../vendor/xlsx.full.min.js'),book=xlsx.utils.book_new();xlsx.utils.book_append_sheet(book,xlsx.utils.aoa_to_sheet([['اسم الموظف'],['Ahmed'],['Excel worker']]));
-await page.setInputFiles('#workerImportFile',{name:'workers.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:xlsx.write(book,{type:'buffer',bookType:'xlsx'})});
+await page.setInputFiles('#workerImportFile',{name:'workers.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(xlsx.write(book,{type:'buffer',bookType:'xlsx'}))});
 await page.waitForFunction(()=>workforce.workers.length===5);assert.equal(await page.evaluate(()=>workforce.workers.filter(w=>w.name==='Excel worker').length),1);checks++;
 if(process.env.GITCO_WORKER_FILE){await page.setInputFiles('#workerImportFile',process.env.GITCO_WORKER_FILE);await page.waitForFunction(()=>workforce.workers.length===45);checks++}
 assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
