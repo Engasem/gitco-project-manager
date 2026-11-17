@@ -23,17 +23,25 @@ function gitcoWorkforce(value) {
     if(quoted)throw Error(text('الملف يحتوي علامة اقتباس غير مغلقة.','Unclosed quote in CSV.'));
     if(value||row.length){row.push(value);lines.push(row)}return lines.filter(r=>r.some(v=>v.trim()));
   }
+  let importMessage='',importBusy=false;
+  function importStatus(message){
+    importMessage=message;const host=document.getElementById('workerImportStatus');if(host){host.textContent=message;host.hidden=!message}
+    const button=document.getElementById('workerImport');if(button)button.disabled=importBusy;
+  }
   let excelLoader;
   function loadExcel(){
     if(window.XLSX)return Promise.resolve(window.XLSX);
     if(!excelLoader)excelLoader=new Promise((resolve,reject)=>{
       const script=document.createElement('script');script.src='vendor/xlsx.full.min.js';
-      script.onload=()=>resolve(window.XLSX);script.onerror=()=>{script.remove();excelLoader=null;reject(Error(text('تعذر تحميل قارئ Excel. أعد المحاولة.','Could not load Excel reader. Please retry.')))};
+      const fail=()=>{clearTimeout(timer);script.remove();excelLoader=null;reject(Error(text('تعذر تحميل قارئ Excel. تحقق من الاتصال وأعد المحاولة.','Could not load Excel reader. Check your connection and retry.')))};
+      const timer=setTimeout(fail,20000);
+      script.onload=()=>{if(!window.XLSX){fail();return}clearTimeout(timer);resolve(window.XLSX)};script.onerror=fail;
       document.head.appendChild(script);
     });return excelLoader;
   }
   async function importWorkers(file){
-    if(!file)return;
+    if(!file||importBusy)return;
+    importBusy=true;importStatus(text('جار قراءة الملف…','Reading file…'));
     try{
       if(file.size>5*1024*1024)throw Error(text('حجم الملف الأقصى 5 ميغابايت.','Maximum file size is 5 MB.'));
       if(!/\.(csv|xlsx)$/i.test(file.name))throw Error(text('اختر ملف Excel .xlsx أو CSV UTF-8.','Choose an Excel .xlsx or CSV UTF-8 file.'));
@@ -48,9 +56,17 @@ function gitcoWorkforce(value) {
       if(names.length>5000||names.some(n=>n.length>100||n.includes('\ufffd')||/[\r\n]/.test(n)))throw Error(text('تحقق من الأسماء واحفظ الملف بترميز UTF-8 (حتى 5000 اسم، 100 حرف للاسم).','Check names and save as UTF-8 (up to 5000 names, 100 characters each).'));
       const known=new Set(workforce.workers.map(w=>w.name.trim().toLowerCase())),added=[];let duplicates=0;
       for(const name of names){const key=name.toLowerCase();if(known.has(key)){duplicates++;continue}known.add(key);added.push({id:crypto.randomUUID(),name})}
-      if(added.length){workforce.workers.push(...added);save();window.gitcoRenderWorkers()}
-      toast(text(`تمت إضافة ${added.length} عامل، وتجاوز ${duplicates} اسم مكرر.`,`Added ${added.length} workers; skipped ${duplicates} duplicates.`));
-    }catch(e){toast(e.message)}
+      if(!added.length){importStatus(text(`لا يوجد أسماء جديدة للإضافة. الأسماء المكررة: ${duplicates}.`,`No new names to add. Duplicates: ${duplicates}.`));return}
+      importStatus(text('الملف جاهز. راجع الأسماء واضغط تأكيد الإضافة.','File ready. Review names and confirm.'));
+      showModal(`<h2>${text('تأكيد استيراد العمال','Confirm worker import')}</h2><p>${esc(file.name)}</p><p>${text(`أسماء جديدة: ${added.length} — أسماء مكررة ستُتجاوز: ${duplicates}`,`New names: ${added.length} — duplicates to skip: ${duplicates}`)}</p><div class="worker-import-preview"><ol>${added.map(w=>`<li>${esc(w.name)}</li>`).join('')}</ol></div><p class="muted">${text('لن تتغير سجلات الحضور السابقة.','Existing attendance stays unchanged.')}</p><div class="actions"><button type="button" class="plain" id="workerImportCancel">${text('إلغاء','Cancel')}</button><button type="button" class="primary" id="workerImportConfirm">${text(`تأكيد إضافة ${added.length} عامل`,`Confirm adding ${added.length} workers`)}</button></div>`);
+      document.getElementById('workerImportCancel').onclick=()=>{closeModal();importStatus(text('تم إلغاء الاستيراد؛ لم يُضف أي عامل.','Import cancelled; no workers added.'))};
+      document.getElementById('workerImportConfirm').onclick=()=>{
+        const current=new Set(workforce.workers.map(w=>w.name.trim().toLowerCase())),fresh=added.filter(w=>!current.has(w.name.toLowerCase()));
+        workforce.workers.push(...fresh);save();query='';closeModal();window.gitcoRenderWorkers();
+        importStatus(text(`تمت إضافة ${fresh.length} عامل إلى القائمة. إجمالي العمال: ${workforce.workers.length}. تابع حالة الحفظ السحابي أعلى الصفحة.`,`Added ${fresh.length} workers. Total: ${workforce.workers.length}. See cloud save status above.`));
+      };
+    }catch(e){importStatus(text('تعذر الاستيراد: ','Import failed: ')+(e.message||text('الملف غير صالح.','Invalid file.')))}
+    finally{importBusy=false;importStatus(importMessage)}
   }
   function rows(){return workforce.workers.filter(w=>!w.archived&&w.name.toLowerCase().includes(query.toLowerCase()));}
   function drawMonth(){
@@ -70,7 +86,7 @@ function gitcoWorkforce(value) {
   }
   window.gitcoRenderWorkers=function(){
     const host=document.getElementById('view-workers');if(!host)return;
-    host.innerHTML=`<div class="hello"><div><h1>${text('حضور العمال','Worker attendance')}</h1><div class="muted">${text('اختار اليوم وسجّل الحضور والإضافي. الحفظ تلقائي.','Choose a day and record attendance and overtime. Changes save automatically.')}</div></div><button class="primary" id="workerAdd">＋ ${text('إضافة عامل','Add worker')}</button></div><details class="panel worker-files"><summary>${text('استيراد وتصدير العمال','Import / export workers')}</summary><p class="muted">${text('استيراد Excel (.xlsx) أو CSV UTF-8، وتصدير CSV يفتح بـExcel. عمود اسم العامل أو اسم الموظف؛ الاستيراد يضيف الأسماء فقط ويحافظ على الحضور السابق.','Import Excel (.xlsx) or CSV UTF-8; export CSV for Excel. Use a name column; import adds names and preserves attendance.')}</p><div class="inline"><button class="secondary" id="workerImport">${text('استيراد أسماء العمال','Import worker names')}</button><button class="plain" id="workerExport">${text('تصدير أسماء العمال','Export worker names')}</button><button class="plain" id="workerTemplate">${text('تنزيل قالب جاهز','Download template')}</button><input hidden type="file" id="workerImportFile" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></div></details><div class="toolbar"><label class="field">${text('اليوم','Date')}<input id="workerDate" type="date" value="${date}"></label><label class="field">${text('بحث عن عامل','Find worker')}<input id="workerSearch" type="search" value="${esc(query)}"></label></div><div class="panel"><button type="button" class="secondary" id="workerAllPresent">✓ ${text('الكل حاضر','Mark all present')}</button><p class="muted">${text('يسجّل العمال غير المسجّلين فقط؛ الغياب والإضافي المسجّل يبقى كما هو.','Marks unmarked workers only; existing absences and overtime stay unchanged.')}</p><p id="workerSummary" role="status"></p><div id="workerRows"></div></div><details class="panel worker-month"><summary>${text('إجمالي الشهر لكل عامل','Monthly totals per worker')}</summary><label class="field">${text('الشهر','Month')}<input type="month" id="workerMonth" value="${month}"></label><p class="muted">${text('الأيام غير المسجّلة والعطل لا تُحسب غياباً.','Unmarked days and days off do not count as absences.')}</p><div id="workerMonthRows"></div></details>`;
+    host.innerHTML=`<div class="hello"><div><h1>${text('حضور العمال','Worker attendance')}</h1><div class="muted">${text('اختار اليوم وسجّل الحضور والإضافي. الحفظ تلقائي.','Choose a day and record attendance and overtime. Changes save automatically.')}</div></div><button class="primary" id="workerAdd">＋ ${text('إضافة عامل','Add worker')}</button></div><p id="workerImportStatus" class="panel" role="status" aria-live="polite" hidden></p><details class="panel worker-files"><summary>${text('استيراد وتصدير العمال','Import / export workers')}</summary><p class="muted">${text('استيراد Excel (.xlsx) أو CSV UTF-8، وتصدير CSV يفتح بـExcel. عمود اسم العامل أو اسم الموظف؛ الاستيراد يضيف الأسماء فقط ويحافظ على الحضور السابق.','Import Excel (.xlsx) or CSV UTF-8; export CSV for Excel. Use a name column; import adds names and preserves attendance.')}</p><div class="inline"><button class="secondary" id="workerImport">${text('استيراد أسماء العمال','Import worker names')}</button><button class="plain" id="workerExport">${text('تصدير أسماء العمال','Export worker names')}</button><button class="plain" id="workerTemplate">${text('تنزيل قالب جاهز','Download template')}</button><input hidden type="file" id="workerImportFile" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></div></details><div class="toolbar"><label class="field">${text('اليوم','Date')}<input id="workerDate" type="date" value="${date}"></label><label class="field">${text('بحث عن عامل','Find worker')}<input id="workerSearch" type="search" value="${esc(query)}"></label></div><div class="panel"><button type="button" class="secondary" id="workerAllPresent">✓ ${text('الكل حاضر','Mark all present')}</button><p class="muted">${text('يسجّل العمال غير المسجّلين فقط؛ الغياب والإضافي المسجّل يبقى كما هو.','Marks unmarked workers only; existing absences and overtime stay unchanged.')}</p><p id="workerSummary" role="status"></p><div id="workerRows"></div></div><details class="panel worker-month"><summary>${text('إجمالي الشهر لكل عامل','Monthly totals per worker')}</summary><label class="field">${text('الشهر','Month')}<input type="month" id="workerMonth" value="${month}"></label><p class="muted">${text('الأيام غير المسجّلة والعطل لا تُحسب غياباً.','Unmarked days and days off do not count as absences.')}</p><div id="workerMonthRows"></div></details>`;
     document.getElementById('workerImport').onclick=()=>document.getElementById('workerImportFile').click();
     document.getElementById('workerImportFile').onchange=e=>{importWorkers(e.target.files[0]);e.target.value=''};
     document.getElementById('workerExport').onclick=()=>downloadCsv('gitco-workers.csv',[[text('اسم العامل','name')],...workforce.workers.map(w=>[w.name])]);
@@ -89,6 +105,6 @@ function gitcoWorkforce(value) {
     };
     document.getElementById('workerRows').onclick=e=>{const row=e.target.closest('[data-worker]'),b=e.target.closest('button');if(!row||!b)return;const day=workforce.days[date]||(workforce.days[date]={});if(b.hasAttribute('data-clear'))delete day[row.dataset.worker];else if(b.dataset.status)day[row.dataset.worker]={...day[row.dataset.worker],status:b.dataset.status,overtime:b.dataset.status==='present'?(day[row.dataset.worker]?.overtime||0):0};else return;save();drawRows()};
     document.getElementById('workerRows').onchange=e=>{if(e.target.tagName!=='INPUT')return;const input=e.target,hours=Number(input.value),id=input.closest('[data-worker]').dataset.worker,r=workforce.days[date]?.[id];if(!r||r.status!=='present')return;if(input.value===''||!Number.isFinite(hours)||hours<0||hours>24||hours*2!==Math.round(hours*2)){input.value=r.overtime||0;toast(text('أدخل ساعات من 0 إلى 24، بفاصل نصف ساعة','Enter 0–24 hours in half-hour steps'));return}r.overtime=hours;save();drawMonth()};
-    drawRows();
+    drawRows();importStatus(importMessage);
   };
 })();

@@ -88,7 +88,7 @@ function wfTemplate(){wfCollect();const names=lang==='ar'?workflowDefaultsAr:wor
 function wfSave(){wfCollect();const p=projects.find(x=>String(x.id)===String(wfProjectId));if(!p)return;const fields=document.querySelectorAll('.workflow-box [data-wf]');for(const f of fields)p[f.dataset.wf]=f.value;p.teamNotes=document.querySelector('#wfTeam')?.value||'';p.drawingNotes=document.querySelector('#wfDrawings')?.value||'';p.workflow=wfDraft;save();render();closeModal();toast(lang==='ar'?'تم حفظ خطة المشروع':'Project plan saved')}
 const oldOpenProject=openProject;openProject=function(id){oldOpenProject(id);const modal=document.querySelector('#modalRoot .modal');if(modal){const div=document.createElement('div');div.className='workflow-actions';div.innerHTML=`<button class="primary" onclick="wfOpen(${JSON.stringify(id)})">📋 ${lang==='ar'?'خطة التنفيذ والعمال':'Execution plan & team'}</button>`;modal.insertBefore(div,modal.children[1]||null)}};
 window.openProject=openProject;window.wfOpen=wfOpen;window.wfAdd=wfAdd;window.wfRemove=wfRemove;window.wfTemplate=wfTemplate;window.wfSave=wfSave;
-</script><script src="ai-panel.js"></script><script src="workers.js"></script>
+</script><script src="ai-panel.js"></script><script src="workers.js?v=20261117-import-confirm"></script>
 <script>
 (function(){
 const URL_BASE='https://bbwfslidmxmgchrhftwj.supabase.co';
